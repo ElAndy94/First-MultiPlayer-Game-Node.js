@@ -1,0 +1,240 @@
+<div id="signDiv">  <!-- Signing in Div -->
+    Username: <input id="signDiv-username" type="text"></input><br> <!-- input username box -->
+    Password: <input id="signDiv-password" type="password"></input> <!-- input password box -->
+    <button id="signDiv-signIn">Sign In</button> <!-- Sign in button -->
+</div>
+
+<div id="gameDiv" style="display:none;">   <!-- Game Div, display none, until logged in! -->
+    <canvas id="ctx" width="500" height="500" style="border:1px solid #000000;">
+				
+	</canvas> <!-- creating canvas -->
+
+    <div id="chat-text" style="width:500px;height:100px;overflow-y:scroll"> <!-- creating chat box, with overflow which you can scroll through -->
+        
+    </div>
+
+    <form id="chat-form">  <!-- the chat form -->
+        <input id="chat-input" type="text" style="width:500px"></input>
+    </form>
+</div>
+
+<script src="socket.io/socket.io.js"></script> <!-- script to the socket.io -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<link rel="stylesheet" href="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css"> <!--Mobile functionality -->
+<script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
+<script src="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script> <!--Mobile functionality -->
+
+<script>
+    var WIDTH = 500;
+	var HEIGHT = 500;
+    var socket = io(); 
+    
+	
+    //signIn/Out 
+    var signDiv = document.getElementById('signDiv'); 
+    var signDivUsername = document.getElementById('signDiv-username'); 
+    var signDivSignIn = document.getElementById('signDiv-signIn'); 
+    var signDivPassword = document.getElementById('signDiv-password'); 
+    
+    signDivSignIn.onclick = function(){  
+        socket.emit('signIn',{username:signDivUsername.value,password:signDivPassword.value}); 
+        }
+    
+    socket.on('signInResponse',function(data){  
+        if(data.success){  
+            signDiv.style.display = 'none'; //display none until the logging has been passed
+            gameDiv.style.display = 'inline-block'; //when log in has been passed then it will display the gameDiv	
+        }  else
+            alert("Sign in was unsuccessful!"); //if password or username is wrong, you get this alart
+    });
+                  
+    //Chat
+    var chatText = document.getElementById('chat-text'); //chat text
+    var chatInput = document.getElementById('chat-input'); //chat input
+    var chatForm = document.getElementById('chat-form'); //the chat form
+           
+    socket.on('addToChat',function(data){  //this adds the message to chat
+       chatText.innerHTML += '<div>' + data + '</div>'; 
+    });
+    
+    socket.on('evalAnswer',function(data){  //evalutation answer
+       console.log(data); 
+    });
+    
+    chatForm.onsubmit = function(e) {  
+        e.preventDefault(); //prevents ""
+        if(chatInput.value[0] === '/')
+		{
+            socket.emit('evalServer',chatInput.value.slice(1)); //to evaluate
+		}
+        else
+            socket.emit('sendMsgToSever',chatInput.value); //this is to send message to sever 
+        chatInput.value = ''; //resets ""
+    }
+	
+	
+    //Game
+	
+	var Img = {}; //creats image array
+	Img.grass = new Image(); 
+	Img.grass.src = '/client/images/grasses.png'; //loads the background
+	
+	var myImage = new Image();
+	myImage.src = '/img/coin.png'; //loads the coin
+	myImage.addEventListener("load", loadImage, false);
+	var shift = 0;
+	var frameWidth = 99;
+	var frameHeight = 99;
+	var totalFrames = 10; //speed of animation
+	var currentFrame = 0;
+	var canvas = document.querySelector("#ctx");
+	var context = canvas.getContext("2d");
+    
+	var ctx = document.getElementById("ctx").getContext("2d");
+    ctx.font = '24px Arial'; //text of the score & level
+    
+    
+    socket.on('newPositions',function(data){ 
+		
+        ctx.clearRect(0,0,500,500); //clears everything
+		drawGrass();
+		
+            for(var i = 0 ; i < data.length; i++)
+			{  //snake head			
+				ctx.fillRect(data[i].x,data[i].y,10,10); //the head of the snake
+				
+				//food 
+				context.drawImage(myImage, shift, 0, frameWidth, frameHeight,
+                    data[i].fx,data[i].fy, 20, 20); //draws the image on the food x and food y
+				
+				for(var j = 0; j < data[i].tail.length; j++)
+				{
+				//snake tail
+				ctx.fillStyle = 'white';	
+				ctx.fillRect(data[i].tail[j].x,data[i].tail[j].y,10,10);
+				}
+				
+				//level text
+				ctx.fillStyle = 'blue';
+				ctx.fillText("level: " + data[i].level,data[i].x,data[i].y - 12); 
+				
+				//score text
+				ctx.fillStyle = 'red';
+				ctx.fillText("score: " + data[i].score,data[i].x,data[i].y); 
+				}
+        });
+	
+        //draw grass function
+    var drawGrass = function(){
+		ctx.drawImage(Img.grass,1,1,500,500); //draws the grass in that area
+	}
+	
+	function loadImage(e) {
+			animate();//runs the animate function
+		}
+    
+	function animate() {
+	  shift += frameWidth + 1;
+	 
+	 
+	  if (currentFrame == totalFrames) {
+		shift = 0;
+		currentFrame = 0;
+	  }
+	 
+	  currentFrame++; //adds 1 to the frame
+	 
+	  requestAnimationFrame(animate); 
+	}
+	
+	
+        document.onkeydown = function(event){ //keyboard controls
+            if(event.keyCode === 39) //right arrow
+                socket.emit('keyPress' ,{inputId:'right',state:true}); 
+            if(event.keyCode === 40) //down arrow
+                socket.emit('keyPress' ,{inputId:'down',state:true});
+            if(event.keyCode === 37) //left arrow
+                socket.emit('keyPress' ,{inputId:'left',state:true});
+            if(event.keyCode === 38) //up arrow
+                socket.emit('keyPress' ,{inputId:'up',state:true});
+        }
+        
+        document.onkeyup = function(event){
+            if(event.keyCode === 39) //right arrow
+                socket.emit('keyPress' ,{inputId:'right',state:false});
+            if(event.keyCode === 40) //down arrow
+                socket.emit('keyPress' ,{inputId:'down',state:false});
+            if(event.keyCode === 37) //left arrow
+                socket.emit('keyPress' ,{inputId:'left',state:false});
+            if(event.keyCode === 38) //up arrow
+                socket.emit('keyPress' ,{inputId:'up',state:false});
+         }
+		  
+		  
+		  $("#ctx").mousedown(function(event) { //clicking function
+		  var cvs = $("#ctx"); 
+		  var clickX = event.clientX; //gets the x of the click
+		  var clickY = event.clientY;  //gets the y of the click
+		  var widthx = cvs.width; //canvas width
+		  var heightx = cvs.height; //canvas height
+		  
+		  
+		  if(clickX >= 250 && clickY >125 && clickY <375 ) { //right
+		  resetDirection(); //resets direction so you can click other directions
+		  socket.emit('keyPress' ,{inputId:'right',state:true});
+		  }
+		  
+		  else if (clickX < 250 && clickY >125 && clickY <375 ) { //left
+		  resetDirection();
+		  socket.emit('keyPress' ,{inputId:'left',state:true});
+		  }
+		  
+		  else if (clickY < 125 ) { //up
+		  resetDirection();
+		  socket.emit('keyPress' ,{inputId:'up',state:true});
+		  }
+		  
+		  else if (clickY > 375 ) { //down
+		  resetDirection();
+		  socket.emit('keyPress' ,{inputId:'down',state:true}); 
+		  }
+		   });
+		   
+		  
+		  function resetDirection(){ //this is a little function i made, so it resets all directions
+		  socket.emit('keyPress' ,{inputId:'left',state:false});
+		  socket.emit('keyPress' ,{inputId:'right',state:false});
+		  socket.emit('keyPress' ,{inputId:'down',state:false});
+		  socket.emit('keyPress' ,{inputId:'up',state:false});
+		  }
+		   
+			
+		  $("ctx").on("tap",function(event){ //this is the tap for the mobile touch function
+		  var tapX = event.clientX; //gets the x tap 
+		  var tapY = event.clientY; //gets the y tap
+		  var widthxe = cvs.width; //gets the width of the canvas
+		  var heightxe = cvs.height; //gets the height of the canvas
+		  
+		
+		  if(tapX >= 250 && tapY >125 && tapY <375 ) { //right
+		  resetDirection(); //resets direction so you can click other directions
+		  socket.emit('keyPress' ,{inputId:'right',state:true});
+		  }
+		  
+		  else if (tapX < 250 && tapY >125 && tapY <375 ) { //left
+		  resetDirection();
+		  socket.emit('keyPress' ,{inputId:'left',state:true});
+		  }
+		  
+		  else if (tapY < 125 ) { //up
+		  resetDirection();
+		  socket.emit('keyPress' ,{inputId:'up',state:true});
+		  }
+		  
+		  else if (tapY > 375 ) { //down
+		  resetDirection();
+		  socket.emit('keyPress' ,{inputId:'down',state:true});
+		  }	
+			  });                       
+       	  
+    </script>
